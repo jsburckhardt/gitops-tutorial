@@ -1,0 +1,94 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: dx
+  name: ingress
+spec:
+  selector:
+    app: ingress
+  ports:
+  - port: 80
+    name: ingress
+    protocol: TCP
+    targetPort: 80
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: dx
+  name: ingress
+  labels:
+    app: ingress
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ingress
+  template:
+    metadata:
+      labels:
+        app: ingress
+    spec:
+      containers:
+      - name: ingress
+        image: dxdevregistry01.azurecr.io/telstra.dx.ingress:f1c1fc2ba359148c5ba81315358f0781452734ce
+        ports:
+        - containerPort: 80
+        env:        
+        - name: ASPNETCORE_ENVIRONMENT
+          value: "Development"
+        - name: SelfCredentials__Key          
+          valueFrom:
+            secretKeyRef:
+              name: ingress-selfcredentialskey
+              key: ingress-selfcredentialskey
+        - name: DxAccessControlLibrary__AuthenticationApi__BaseUrl
+          value: 'https://mgmt.dev.dataexchange.work/authentication/'
+        - name: DxAccessControlLibrary__AuthenticationApi__RequestTimeoutInMinutes
+          value: '1'
+        - name: DxAccessControlLibrary__Opa__BaseUrl
+          value: 'http://localhost:8181/'
+        - name: DxAccessControlLibrary__Opa__RequestTimeoutInMinutes
+          value: '1'
+        - name: DataEventHub__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: ingress-dataeventhubconnectionstring
+              key: ingress-dataeventhubconnectionstring
+        - name: NotificationsEventHub__ConnectionString
+          valueFrom:
+            secretKeyRef:
+              name: ingress-notificationseventhubconnectionstring
+              key: ingress-notificationseventhubconnectionstring
+        - name: IngressConfiguration__Directory
+          value: "/etc/ingress/"
+        volumeMounts:
+        - name: ingressid1
+          mountPath: /etc/ingress
+          readOnly: true
+      - name: opa
+        image: openpolicyagent/opa:0.10.5
+        ports:
+        - name: http
+          containerPort: 8181
+        args:
+        - "run"
+        - "-s"
+        - "-c"
+        - "/opa-config/Ingress-OpaSelfCredentialsKey.yaml"
+        volumeMounts:
+        - readOnly: true
+          mountPath: /opa-config
+          name: opa-config-ingress
+      volumes:
+      - name: opa-config-ingress
+        secret:
+          secretName: ingress-opaselfcredentialskey      
+      - name: ingressid1
+        secret:
+          secretName: "eh-rian-test1" # I made this manually in the cluster to test how to mount this here
+          items:
+          - key: "connection-string"
+            path: ingressid1
